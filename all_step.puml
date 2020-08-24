@@ -1,0 +1,84 @@
+@startuml
+start
+if (data["func"] == "quit")
+  :stopflash( )关闭料灯
+  发送status=5信息;
+  :elecquit( )关闭电枪;
+  :断开客户端websocket连接
+  unregister(websocket);
+elseif (data["func"] == "closeflg")
+  :stopflash( )关闭料灯;
+  :elecquit( )关闭电枪;
+  :断开客户端websocket连接
+  unregister(websocket);
+elseif (data["func"] == "mode") then (yes)
+  '---------------------------自动模式
+  :cur.execute
+  查询CONTROL_14222表中esn数量num;
+  if (num == 0) then (yes)
+  : 发送没有数据信息;
+  else
+  :查询CONTROL_14222所有字段;
+  : 获取type值;
+    if (type in ['29', '30', '31', '32'])
+    : getmaterial()物料状态;
+      if (物料状态是3)
+      : 操作物料灯;
+      endif
+    else
+    :type == 0 | 28;
+    :CONTROL_14222删除特定的esn;
+    :将该esn添加到WORKDONE_14222;
+    endif
+  endif
+elseif (data["func"] == "free")
+  '---------------------------电枪反松
+  :data["func"] == "free";
+  :freemode()电枪反松;
+elseif (data["func"] == "hand")
+  '---------------------------手动模式
+  :获取data中的value值里面的esn和type;
+  if (type == '  ')
+    :查询全表WORKDONE_14222的esn
+    和data中value的esn相等的信息;
+    :选出scount = fetchone()[0];
+    if (scount > 0)
+      :查询表WORKDONE_14222的esn
+      和data中value的esn相等的信息;
+      :从表中查的esn定义为sesn;
+      if (sesn == esn)
+        :将data['value']的esn和type以及当前时间
+        添加到待做表CONTROL_14222中;
+       endif
+    else
+      :发送{'status':'6','insertesn':'error','result':'1'}信息;
+    endif
+  else
+    :扫描CONTROL_14222esn字段和
+    data-value中esn一样的;
+    if (fetchone()[0] > 0)
+      :发送{'status':'6','insertesn':'error','result':'0'}信息;
+    else
+      :将该data['value']中esn，type，
+      当前时间信息插入表CONTROL_14222;
+    endif
+endif
+elseif (data["func"] == "count")
+  '---------------------------技术偏离
+  :查询表COUNT_14222中
+  TIME_STAMP字段大于当前时间信息;
+  :r = cur.fetchone();
+  if (r[0] > 0)
+    :将COUNT_14222表中时间大于当前时间的
+     信息更新为现在获取到的data['value']值;
+  else
+    :将该data['value']直接插入COUNT_14222;
+  endif
+elseif (data["func"] == "deleteesn")
+  '---------------------------删除esn
+  :获取data['value']值;
+  :将CONTROL_14222表中对应data['value']值删除;
+  :发送信息{'status':'8','deleteesn':'ok'};
+  :若删除失败
+  发送信息{'status':'8','deleteesn':'error'};
+@enduml
